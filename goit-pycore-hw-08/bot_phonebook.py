@@ -1,5 +1,4 @@
 from collections import UserDict
-from copyreg import pickle
 from datetime import datetime, timedelta
 import pickle
 import re
@@ -365,3 +364,5 @@ def main():
    
 if __name__ == "__main__":
     main()
+
+
