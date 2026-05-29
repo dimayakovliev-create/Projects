@@ -79,11 +79,13 @@ class Record:
         return False
 
     def edit_phone(self, old_phone_number, new_phone_number):
-        for i, phone in enumerate(self.phones):
+        # Шукаємо об'єкт телефону з таким значенням
+        for phone in self.phones:
             if phone.value == old_phone_number:
-                self.phones[i] = Phone(new_phone_number)
-                return True
-        return False
+                phone.value = new_phone_number  # Змінюємо на новий
+                return
+        # Якщо цикл завершився і номер не знайдено — кидаємо помилку
+        raise ValueError(f"Old phone number {old_phone_number} not found in this contact.")
         
     def find_phone(self, phone_number):
         for phone in self.phones:
@@ -130,21 +132,7 @@ class Record:
 
 
 class AddressBook(UserDict):
-    # HW08! Додані методи для збереження та завантаження даних безпосередньо в класі AddressBook, щоб не залежати від зовнішнього модуля storage.py
-    def save_data(self, filename="goit-pycore-hw-08/addressbook.pkl"):
-        with open(filename, "wb") as f:
-            pickle.dump(self, f)
-    # HW08! Метод для завантаження даних, який повертає об'єкт AddressBook або створює новий, якщо файл не знайдено
-    
-    def load_data(self, filename="goit-pycore-hw-08/addressbook.pkl"):
-        try:
-            with open(filename, "rb") as f:
-                restored_book = pickle.load(f)
-                self.data = restored_book.data  # Копіюємо дані в поточний екземпляр
-        except (FileNotFoundError, EOFError):
-            self.data = {}  # Залишаємо книгу порожньою
-    
-    # Додані методи для роботи з контактами (додавання, пошук, видалення)
+
     def add_record(self, record):
         self.data[record.name.value] = record
 
@@ -156,8 +144,20 @@ class AddressBook(UserDict):
             del self.data[name]
             return True
         return False
-
+    
+    def add_email_to_record(self, name, email):
+        record = self.find(name)
+        if not record:
+            return f"Contact {name} not found."
+        
+        if not hasattr(record, 'emails') or record.emails is None:
+            record.emails = []
+            
+        record.add_email(email)
+        save_data(self)  # HW08! (правки) Збереження даних після додавання email
+        return f"Email '{email}' successfully added to {name}."
     # Універсальний пошук по імені, телефону та email
+
     def search(self, query):
         query = query.lower()
         results = []
@@ -175,14 +175,15 @@ class AddressBook(UserDict):
                 continue
                 
             # Перевіряємо email на відповідність запиту (ігноруємо регістр) та підтримуємо частковий пошук
-            email_match = any(query in email.value.lower() for email in record.emails)
+            emails = getattr(record, 'emails', []) or []
+            email_match = any(query in email.value.lower() for email in emails)
             if email_match:
                 results.append(record)
                 continue
                 
         return results
 
-    # HW07! Додавання методу для отримання списку контактів, у яких день народження припадає на найближчі 7 днів:
+    # Додавання методу для отримання списку контактів, у яких день народження припадає на найближчі 7 днів:
     def get_upcoming_birthdays(self):
         today = datetime.today().date()
         upcoming = []
@@ -216,14 +217,26 @@ class AddressBook(UserDict):
         return upcoming
 
 
-# HW07! Додані функції-обробники команд користувача:
+# HW08! Виправлено! Додані функції для збереження та завантаження даних з файлу за допомогою модуля pickle (замість методів класу AddressBook):
+def save_data(book, filename="goit-pycore-hw-08/addressbook.pkl"):
+        with open(filename, "wb") as f:
+            pickle.dump(book, f)
+   
+
+def load_data(filename="goit-pycore-hw-08/addressbook.pkl"):
+    try:
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return AddressBook()
+
+
 def parse_input(user_input):
     if not user_input.strip():
         return "", []
     cmd, *args = user_input.split()
     cmd = cmd.strip().lower()
     return cmd, args
-
 
 @input_error
 def add_contact(args, book):
@@ -264,12 +277,6 @@ def show_phone(args, book):
     return f"{name}'s phones: {', '.join(p.value for p in record.phones)}"
 
 
-def show_all(book):
-    if not book.data:
-        return "Address book is empty."
-    return "\n".join(str(record) for record in book.data.values())
-
-
 @input_error
 def add_birthday(args, book):
     if len(args) < 2:
@@ -306,11 +313,22 @@ def birthdays(args, book):
         result.append(f"{item['name']}: congratulation date {item['congratulation_date']}")
     return "\n".join(result)
 
+@input_error
+def add_email(args, book):
+    if len(args) < 2:
+        return "Будь ласка, вкажіть ім'я та email."
+    name, email = args[0], args[1]
+    return book.add_email_to_record(name, email)
 
-# HW07! Головна функція для запуску бота та обробки команд користувача:
+def show_all(book):
+    if not book.data:
+        return "Address book is empty."
+    return "\n".join(str(record) for record in book.data.values())
+
+
+# Головна функція для запуску бота та обробки команд користувача:
 def main():
-    book = AddressBook()
-    book.load_data()  # HW08! Завантаження даних при запуску бота
+    book = load_data()  # HW08! (правки) Завантаження даних при запуску бота
     print("Welcome to the assistant bot!")
     
     while True:
@@ -321,7 +339,7 @@ def main():
         command, *args = parse_input(user_input)
 
         if command in ["close", "exit"]:
-            book.save_data() # HW08! Збереження даних перед виходом
+            save_data(book) # HW08! (правки) Збереження даних перед виходом
             print("Good bye!")
             break
         elif command == "hello":
@@ -334,6 +352,8 @@ def main():
             print(show_phone(*args, book))
         elif command == "all":
             print(show_all(book))
+        elif command == "add-email":
+            print(add_email(*args, book))
         elif command == "add-birthday":
             print(add_birthday(*args, book))
         elif command == "show-birthday":
@@ -341,7 +361,7 @@ def main():
         elif command == "birthdays":
             print(birthdays(*args, book))
         else:
-            print("Invalid command. Enter the argument for the command: add, change, phone, all, add-birthday, show-birthday, birthdays, exit, close, hello")
+            print("Invalid command. Enter the argument for the command: add, change, phone, all, add-birthday, add-email, show-birthday, birthdays, exit, close, hello")
    
 if __name__ == "__main__":
     main()
