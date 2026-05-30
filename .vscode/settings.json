@@ -1,5 +1,0 @@
-{
-    "terminal.integrated.suggest.insertTrailingSpace": true,
-    "terminal.integrated.suggest.enabled": true,
-    "python-envs.defaultEnvManager": "ms-python.python:system"
-}
