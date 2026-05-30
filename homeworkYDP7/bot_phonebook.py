@@ -1,6 +1,8 @@
 from collections import UserDict
 from copyreg import pickle
 from datetime import datetime, timedelta
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import NestedCompleter, WordCompleter
 import pickle
 import re
 
@@ -267,6 +269,17 @@ def change_contact(args, book):
 
 
 @input_error
+def delete_contact(args, book):
+    if len(args) < 1:
+        raise IndexError
+    name = args[0]
+    if book.delete(name):
+        return "Contact deleted successfully."
+    else:
+        raise KeyError
+
+
+@input_error
 def show_phone(args, book):
     if len(args) < 1:
         raise IndexError
@@ -320,22 +333,81 @@ def add_email(args, book):
     name, email = args[0], args[1]
     return book.add_email_to_record(name, email)
 
+@input_error
+def search_info(args, book):
+    if len(args) < 1:
+        raise IndexError
+    query = args[0]
+    results = book.search(query)
+    if not results:
+        return "No contacts found matching the query."
+    return "\n".join(str(record) for record in results)
+
 def show_all(book):
     if not book.data:
         return "Address book is empty."
     return "\n".join(str(record) for record in book.data.values())
 
+def show_help():
+    help_text = """
+Available commands:
+  help                                         - Show this help message
+  hello                                        - Greet the bot
+  all                                          - Show all contacts
+  add [name] [phone]                           - Add a new contact
+  change [name] [old_phone] [new_phone]        - Change contact's phone number
+  phone [name]                                 - Show phone number for a contact
+  add-email [name] [email]                     - Add email to a contact
+  add-birthday [name] [date]                   - Add birthday (DD.MM.YYYY) to a contact
+  show-birthday [name]                         - Show birthday for a contact
+  birthdays                                    - Show upcoming birthdays for the next week
+  search [info]                                - Search contacts by name or phone
+  close / exit                                 - Save data and exit the bot
+"""
+    print(help_text)
+
 
 # Головна функція для запуску бота та обробки команд користувача:
 def main():
-    book = load_data()  # HW08! (правки) Завантаження даних при запуску бота
+    book = load_data()
     print("Welcome to the assistant bot!")
     
     while True:
-        user_input = input("Enter a command: ")
+        # 1. Створюємо словник для підказок, де ключі — це імена контактів, а значення — None (підказки для аргументів не потрібні)
+        contacts_dict = {name: None for name in book.keys()}
+
+        # Створюємо словник для NestedCompleter, де ключі — це команди, а значення — словник з іменами контактів для відповідних команд.
+        completer_dictionary = {
+            "add": contacts_dict,          # Підскаже імена контактів для команди add (хоча для додавання нового контакту це не обов'язково, але може допомогти при оновленні існуючого)
+            "change": contacts_dict,       # Підскаже імена існуючих контактів
+            "phone": contacts_dict,        # Підскаже, чий номер телефона шукати
+            "add-email": contacts_dict,    # Підскаже ім'я для додавання email
+            "add-birthday": contacts_dict, # Підскаже ім'я для додавання дня народження
+            "show-birthday": contacts_dict,# Підскаже ім'я для виведення дня народження
+            "delete": contacts_dict,       # Підскаже ім'я для видалення контакту
+            "search": None,                # Вільний текстовий пошук (підказки приховані)
+            "all": None,                   # Аргументи не потрібні
+            "birthdays": None,
+            "hello": None,
+            "help": None,
+            "exit": None,
+            "close": None
+        }
+
+        command_completer = NestedCompleter.from_nested_dict(completer_dictionary)
+        
+        try:
+            # Використовуємо prompt з нашим NestedCompleter для вводу команд користувача з автодоповненням
+            user_input = prompt("Enter a command: ", completer=command_completer)
+        except (KeyboardInterrupt, EOFError):  # Захист від Ctrl+C або Ctrl+D
+            save_data(book)
+            print("\nGood bye!") 
+            break
+
         if not user_input.strip():
             continue
-            
+      
+      
         command, *args = parse_input(user_input)
 
         if command in ["close", "exit"]:
@@ -348,6 +420,8 @@ def main():
             print(add_contact(*args, book))
         elif command == "change":
             print(change_contact(*args, book))
+        elif command == "delete":
+            print(delete_contact(*args, book))
         elif command == "phone":
             print(show_phone(*args, book))
         elif command == "all":
@@ -358,10 +432,14 @@ def main():
             print(add_birthday(*args, book))
         elif command == "show-birthday":
             print(show_birthday(*args, book))
+        elif command == "search":
+            print(search_info(*args, book))
         elif command == "birthdays":
             print(birthdays(*args, book))
+        elif command == "help":
+            print(show_help())
         else:
-            print("Invalid command. Enter the argument for the command: add, change, phone, all, add-birthday, add-email, show-birthday, birthdays, exit, close, hello")
+            print("Invalid command. Enter the argument for the command: add, change, delete, phone, all, add-birthday, add-email, search, show-birthday, birthdays, exit, close, hello")
    
 if __name__ == "__main__":
     main()
